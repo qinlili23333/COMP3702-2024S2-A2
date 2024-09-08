@@ -22,7 +22,8 @@ class Solver:
         #
         # TODO: Define any class instance variables you require (e.g. dictionary mapping state to VI value) here.
         #
-        pass
+        self.state={}
+        self.state_cache={}
 
     @staticmethod
     def testcases_to_attempt():
@@ -34,6 +35,7 @@ class Solver:
 
     # === Value Iteration ==============================================================================================
 
+    ### BFS mode
     def vi_initialise(self):
         """
         Initialise any variables required before the start of Value Iteration.
@@ -44,7 +46,30 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        init_state=self.environment.get_init_state()
+        self.state[init_state]=0.0
+        self.state_cache[init_state]=0.0
+        sub_states=init_state.get_successors()
+        while(len(sub_states)!=0):
+            new_sub_states=[]
+            for i in sub_states:
+                self.state_cache[i]=0.0
+                if i in self.state:
+                    continue
+                if i in self.environment.obstacle_map:
+                    self.state[i]=-self.environment.collision_penalty
+                    continue
+                if i in self.environment.thorn_map:
+                    self.state[i]=-self.environment.thorn_penalty
+                    continue
+                if self.environment.is_solved(i):
+                    self.state[i]=100.0
+                    continue
+                self.state[i]=0.0
+                new_sub_states+=i.get_successors()
+            sub_states=new_sub_states
+        print(len(self.state))
+
 
     def vi_is_converged(self):
         """
@@ -56,7 +81,15 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        delta=0.01
+        for i in self.state_cache:
+            if self.state.get(i)==None:
+                #self.state[i]=self.state_cache[i]
+                pass
+            if abs(self.state[i]-self.state_cache[i])>delta:
+                return False
+        print(len(self.state))
+        return True
 
     def vi_iteration(self):
         """
@@ -67,7 +100,30 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        dis_factor=0.9
+        print("iteration")
+        for i in self.state:
+            self.state_cache=self.state.copy()
+            # calculate value
+            max=0
+            for j in BEE_ACTIONS:
+                val=0
+                p_double=self.environment.double_move_probs[j]
+                p_cw=self.environment.drift_cw_probs[j]
+                p_ccw=self.environment.drift_ccw_probs[j]
+                p_success=1-p_double-p_cw-p_ccw
+
+                preview=self.environment.apply_dynamics(i,j)
+                val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
+                if p_double!=0:
+                    val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+2*preview[0])
+                if p_cw!=0:
+                    val+=p_cw*(self.vi_get_state_value(self.environment.apply_dynamics(i,SPIN_RIGHT)[1])*dis_factor-ACTION_BASE_COST[SPIN_RIGHT])
+                if p_ccw!=0:
+                    val+=p_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(i,SPIN_LEFT)[1])*dis_factor-ACTION_BASE_COST[SPIN_LEFT])
+                if val>max:
+                    max=val
+            self.state[i]=max
 
     def vi_plan_offline(self):
         """
@@ -94,7 +150,12 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        if self.state_cache.get(state):
+            return self.state_cache[state]
+        else:
+            #print("not found")
+            self.state_cache[state]=0.0
+            return 0
 
     def vi_select_action(self, state: State):
         """
@@ -107,7 +168,7 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        
 
     # === Policy Iteration =============================================================================================
 

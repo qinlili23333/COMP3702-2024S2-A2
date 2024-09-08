@@ -69,5 +69,11 @@ class State:
         return State(self.environment, self.BEE_posit, self.BEE_orient, self.widget_centres, self.widget_orients,
                      force_valid=self.force_valid)
 
-
+    def get_successors(self):
+        successors = []
+        for action in BEE_ACTIONS:
+            new_state = self.environment.apply_dynamics(self, action)
+            if(new_state[1]!=self):
+                successors.append(new_state[1])
+        return successors
 
