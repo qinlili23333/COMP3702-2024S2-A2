@@ -58,14 +58,12 @@ class Solver:
                     continue
                 if i in self.environment.obstacle_map:
                     self.state[i]=-self.environment.collision_penalty
-                    continue
-                if i in self.environment.thorn_map:
+                elif i in self.environment.thorn_map:
                     self.state[i]=-self.environment.thorn_penalty
-                    continue
-                if self.environment.is_solved(i):
+                elif self.environment.is_solved(i):
                     self.state[i]=100.0
-                    continue
-                self.state[i]=0.0
+                else:
+                    self.state[i]=0.0
                 new_sub_states+=i.get_successors()
             sub_states=new_sub_states
         print(len(self.state))
@@ -82,14 +80,15 @@ class Solver:
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
         delta=0.01
+        converg=True
         for i in self.state_cache:
             if self.state.get(i)==None:
-                #self.state[i]=self.state_cache[i]
+                self.state[i]=self.state_cache[i]
+                converg=False
                 pass
             if abs(self.state[i]-self.state_cache[i])>delta:
-                return False
-        print(len(self.state))
-        return True
+                converg=False
+        return converg
 
     def vi_iteration(self):
         """
@@ -101,11 +100,10 @@ class Solver:
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
         dis_factor=0.9
-        print("iteration")
+        self.state_cache=self.state.copy()
         for i in self.state:
-            self.state_cache=self.state.copy()
             # calculate value
-            max=0
+            max=-10000
             for j in BEE_ACTIONS:
                 val=0
                 p_double=self.environment.double_move_probs[j]
@@ -150,12 +148,13 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        if self.state_cache.get(state):
-            return self.state_cache[state]
-        else:
-            #print("not found")
-            self.state_cache[state]=0.0
-            return 0
+        if state in self.environment.obstacle_map:
+           return -self.environment.collision_penalty
+        elif state in self.environment.thorn_map:
+            return -self.environment.thorn_penalty
+        elif self.environment.is_solved(state):
+            return 100.0
+        return self.state_cache[state]
 
     def vi_select_action(self, state: State):
         """
@@ -168,6 +167,29 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
+        max=-10000
+        action=FORWARD
+        for i in BEE_ACTIONS:
+            val=0
+            p_double=self.environment.double_move_probs[i]
+            p_cw=self.environment.drift_cw_probs[i]
+            p_ccw=self.environment.drift_ccw_probs[i]
+            p_success=1-p_double-p_cw-p_ccw
+
+            preview=self.environment.apply_dynamics(state,i)
+            val+=p_success*(self.vi_get_state_value(preview[1])*0.9+preview[0])
+            if p_double!=0:
+                val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],i)[1])*0.9+2*preview[0])
+            if p_cw!=0:
+                val+=p_cw*(self.vi_get_state_value(self.environment.apply_dynamics(state,SPIN_RIGHT)[1])*0.9-ACTION_BASE_COST[SPIN_RIGHT])
+            if p_ccw!=0:
+                val+=p_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(state,SPIN_LEFT)[1])*0.9-ACTION_BASE_COST[SPIN_LEFT])
+            if val>max:
+                max=val
+                action=i  
+            #print(val) 
+        #print(action)
+        return action
         
 
     # === Policy Iteration =============================================================================================
