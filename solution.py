@@ -66,7 +66,6 @@ class Solver:
                     self.state[i]=0.0
                 new_sub_states+=i.get_successors()
             sub_states=new_sub_states
-        print(len(self.state))
 
 
     def vi_is_converged(self):
@@ -107,18 +106,24 @@ class Solver:
             for j in BEE_ACTIONS:
                 val=0
                 p_double=self.environment.double_move_probs[j]
+                p_double_cw=self.environment.double_move_probs[j]*self.environment.drift_cw_probs[j]
+                p_double_ccw=self.environment.double_move_probs[j]*self.environment.drift_ccw_probs[j]
                 p_cw=self.environment.drift_cw_probs[j]
                 p_ccw=self.environment.drift_ccw_probs[j]
-                p_success=1-p_double-p_cw-p_ccw
+                p_success=1-p_double-p_cw-p_ccw-p_double_cw-p_double_ccw
 
                 preview=self.environment.apply_dynamics(i,j)
                 val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
                 if p_double!=0:
                     val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+2*preview[0])
                 if p_cw!=0:
-                    val+=p_cw*(self.vi_get_state_value(self.environment.apply_dynamics(i,SPIN_RIGHT)[1])*dis_factor-ACTION_BASE_COST[SPIN_RIGHT])
+                    val+=p_cw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_RIGHT)[1],j)[1])*dis_factor-ACTION_BASE_COST[SPIN_RIGHT])
+                    if p_double!=0:
+                        val+=p_double_cw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_RIGHT)[1],j)[1],j)[1])*dis_factor+2*self.environment.apply_dynamics(i,SPIN_RIGHT)[0])
                 if p_ccw!=0:
-                    val+=p_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(i,SPIN_LEFT)[1])*dis_factor-ACTION_BASE_COST[SPIN_LEFT])
+                    val+=p_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_LEFT)[1],j)[1])*dis_factor-ACTION_BASE_COST[SPIN_LEFT])
+                    if p_double!=0:
+                        val+=p_double_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_LEFT)[1],j)[1],j)[1])*dis_factor+2*self.environment.apply_dynamics(i,SPIN_LEFT)[0])
                 if val>max:
                     max=val
             self.state[i]=max
@@ -204,7 +209,26 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        init_state=self.environment.get_init_state()
+        self.state[init_state]=0.0
+        self.state_cache[init_state]=0.0
+        sub_states=init_state.get_successors()
+        while(len(sub_states)!=0):
+            new_sub_states=[]
+            for i in sub_states:
+                self.state_cache[i]=0.0
+                if i in self.state:
+                    continue
+                if i in self.environment.obstacle_map:
+                    self.state[i]=-self.environment.collision_penalty
+                elif i in self.environment.thorn_map:
+                    self.state[i]=-self.environment.thorn_penalty
+                elif self.environment.is_solved(i):
+                    self.state[i]=100.0
+                else:
+                    self.state[i]=0.0
+                new_sub_states+=i.get_successors()
+            sub_states=new_sub_states
 
     def pi_is_converged(self):
         """
