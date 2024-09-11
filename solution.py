@@ -24,6 +24,8 @@ class Solver:
         #
         self.state={}
         self.state_cache={}
+        self.policy={}
+        self.policy_cache={}
 
     @staticmethod
     def testcases_to_attempt():
@@ -87,8 +89,8 @@ class Solver:
                 pass
             if abs(self.state[i]-self.state_cache[i])>delta:
                 converg=False
-        x=[self.state[i] for i in self.state_cache]
-        print(max(x),min(x))
+        #x=[self.state[i] for i in self.state_cache]
+        #print(max(x),min(x))
         return converg
 
     def vi_iteration(self):
@@ -216,8 +218,8 @@ class Solver:
             if val>maxv:
                 maxv=val
                 action=j
-            print(val) 
-        print(action)
+            #print(val) 
+        #print(action)
         return action
         
 
@@ -236,10 +238,14 @@ class Solver:
         init_state=self.environment.get_init_state()
         self.state[init_state]=0.0
         self.state_cache[init_state]=0.0
+        self.policy[init_state]=FORWARD
+        self.policy_cache[init_state]=REVERSE
         sub_states=init_state.get_successors()
         while(len(sub_states)!=0):
             new_sub_states=[]
             for i in sub_states:
+                self.policy[i]=FORWARD
+                self.policy_cache[i]=REVERSE
                 self.state_cache[i]=0.0
                 if i in self.state:
                     continue
@@ -264,7 +270,12 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        converged=True
+        for i in self.policy_cache:
+            if self.policy[i]!=self.policy_cache[i]:
+                converged=False
+        return converged
+
 
     def pi_iteration(self):
         """
@@ -276,7 +287,72 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        """
+        Some code are copied and modified from solution of tutorial 7
+        """
+        self.policy_evaluation()
+        self.policy_improvement()
+
+
+    def policy_evaluation(self):
+        # Use iterative / naive solution for policy evaluation
+        """
+        Perform a single iteration of Policy Evaluation to convergence
+        """
+
+        values_converged = False
+        dis_factor = 0.98
+        delta=0.5
+        while not values_converged:
+            self.state_cache=self.state.copy()
+            for i in self.state:
+                # calculate value
+                maxv=-10000
+                for j in BEE_ACTIONS:
+                    val=0
+                    p_double=self.environment.double_move_probs[j]
+                    p_double_cw=self.environment.double_move_probs[j]*self.environment.drift_cw_probs[j]
+                    p_double_ccw=self.environment.double_move_probs[j]*self.environment.drift_ccw_probs[j]
+                    p_cw=self.environment.drift_cw_probs[j]
+                    p_ccw=self.environment.drift_ccw_probs[j]
+                    p_success=1-p_double-p_cw-p_ccw-p_double_cw-p_double_ccw
+
+                    preview=self.environment.apply_dynamics(i,j)
+                    val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
+                    if p_double!=0:
+                        p2=self.environment.apply_dynamics(preview[1],j)
+                        val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+min(preview[0],p2[0]))
+                    if p_cw!=0:
+                        p1=self.environment.apply_dynamics(i,SPIN_RIGHT)
+                        p2=self.environment.apply_dynamics(p1[1],j)
+                        val+=p_cw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
+                        if p_double!=0:
+                            p3=self.environment.apply_dynamics(p2[1],j)
+                            val+=p_double_cw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
+                    if p_ccw!=0:
+                        p1=self.environment.apply_dynamics(i,SPIN_LEFT)
+                        p2=self.environment.apply_dynamics(p1[1],j)
+                        val+=p_ccw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
+                        if p_double!=0:
+                            p3=self.environment.apply_dynamics(p2[1],j)
+                            val+=p_double_ccw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
+                    if val>maxv:
+                        maxv=val
+                self.state[i]=maxv
+            # check convergence
+            differences = [abs(self.state_cache[s] - self.state[s]) for s in self.state]
+            if max(differences) < delta:
+                values_converged = True
+
+
+    def policy_improvement(self):
+        policy_changed = False
+        self.policy_cache=self.policy.copy()
+        # loop over each state, and improve the policy using 1-step lookahead and the values from policy_evaluation
+        for s in self.state:
+            self.policy[s]=self.vi_select_action(s)
+
+        self.converged = not policy_changed
 
     def pi_plan_offline(self):
         """
@@ -302,7 +378,7 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        pass
+        return self.policy[state]
 
     # === Helper Methods ===============================================================================================
     #
