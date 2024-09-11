@@ -78,7 +78,7 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        delta=0.01
+        delta=0.001
         converg=True
         for i in self.state_cache:
             if self.state.get(i)==None:
@@ -87,6 +87,8 @@ class Solver:
                 pass
             if abs(self.state[i]-self.state_cache[i])>delta:
                 converg=False
+        x=[self.state[i] for i in self.state_cache]
+        print(max(x),min(x))
         return converg
 
     def vi_iteration(self):
@@ -98,11 +100,11 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        dis_factor=0.9
+        dis_factor=0.98
         self.state_cache=self.state.copy()
         for i in self.state:
             # calculate value
-            max=-10000
+            maxv=-10000
             for j in BEE_ACTIONS:
                 val=0
                 p_double=self.environment.double_move_probs[j]
@@ -115,18 +117,25 @@ class Solver:
                 preview=self.environment.apply_dynamics(i,j)
                 val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
                 if p_double!=0:
-                    val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+2*preview[0])
+                    p2=self.environment.apply_dynamics(preview[1],j)
+                    val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+min(preview[0],p2[0]))
                 if p_cw!=0:
-                    val+=p_cw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_RIGHT)[1],j)[1])*dis_factor-ACTION_BASE_COST[SPIN_RIGHT])
+                    p1=self.environment.apply_dynamics(i,SPIN_RIGHT)
+                    p2=self.environment.apply_dynamics(p1[1],j)
+                    val+=p_cw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
                     if p_double!=0:
-                        val+=p_double_cw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_RIGHT)[1],j)[1],j)[1])*dis_factor+2*self.environment.apply_dynamics(i,SPIN_RIGHT)[0])
+                        p3=self.environment.apply_dynamics(p2[1],j)
+                        val+=p_double_cw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
                 if p_ccw!=0:
-                    val+=p_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_LEFT)[1],j)[1])*dis_factor-ACTION_BASE_COST[SPIN_LEFT])
+                    p1=self.environment.apply_dynamics(i,SPIN_LEFT)
+                    p2=self.environment.apply_dynamics(p1[1],j)
+                    val+=p_ccw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
                     if p_double!=0:
-                        val+=p_double_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(self.environment.apply_dynamics(self.environment.apply_dynamics(i,SPIN_LEFT)[1],j)[1],j)[1])*dis_factor+2*self.environment.apply_dynamics(i,SPIN_LEFT)[0])
-                if val>max:
-                    max=val
-            self.state[i]=max
+                        p3=self.environment.apply_dynamics(p2[1],j)
+                        val+=p_double_ccw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
+                if val>maxv:
+                    maxv=val
+            self.state[i]=maxv
 
     def vi_plan_offline(self):
         """
@@ -172,28 +181,43 @@ class Solver:
         #
         # In order to ensure compatibility with tester, you should avoid adding additional arguments to this function.
         #
-        max=-10000
+        maxv=-10000
         action=FORWARD
-        for i in BEE_ACTIONS:
+        dis_factor=0.98
+        i=state
+        for j in BEE_ACTIONS:
             val=0
-            p_double=self.environment.double_move_probs[i]
-            p_cw=self.environment.drift_cw_probs[i]
-            p_ccw=self.environment.drift_ccw_probs[i]
-            p_success=1-p_double-p_cw-p_ccw
+            p_double=self.environment.double_move_probs[j]
+            p_double_cw=self.environment.double_move_probs[j]*self.environment.drift_cw_probs[j]
+            p_double_ccw=self.environment.double_move_probs[j]*self.environment.drift_ccw_probs[j]
+            p_cw=self.environment.drift_cw_probs[j]
+            p_ccw=self.environment.drift_ccw_probs[j]
+            p_success=1-p_double-p_cw-p_ccw-p_double_cw-p_double_ccw
 
-            preview=self.environment.apply_dynamics(state,i)
-            val+=p_success*(self.vi_get_state_value(preview[1])*0.9+preview[0])
+            preview=self.environment.apply_dynamics(i,j)
+            val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
             if p_double!=0:
-                val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],i)[1])*0.9+2*preview[0])
+                p2=self.environment.apply_dynamics(preview[1],j)
+                val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+min(preview[0],p2[0]))
             if p_cw!=0:
-                val+=p_cw*(self.vi_get_state_value(self.environment.apply_dynamics(state,SPIN_RIGHT)[1])*0.9-ACTION_BASE_COST[SPIN_RIGHT])
+                p1=self.environment.apply_dynamics(i,SPIN_RIGHT)
+                p2=self.environment.apply_dynamics(p1[1],j)
+                val+=p_cw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
+                if p_double!=0:
+                    p3=self.environment.apply_dynamics(p2[1],j)
+                    val+=p_double_cw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
             if p_ccw!=0:
-                val+=p_ccw*(self.vi_get_state_value(self.environment.apply_dynamics(state,SPIN_LEFT)[1])*0.9-ACTION_BASE_COST[SPIN_LEFT])
-            if val>max:
-                max=val
-                action=i  
-            #print(val) 
-        #print(action)
+                p1=self.environment.apply_dynamics(i,SPIN_LEFT)
+                p2=self.environment.apply_dynamics(p1[1],j)
+                val+=p_ccw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
+                if p_double!=0:
+                    p3=self.environment.apply_dynamics(p2[1],j)
+                    val+=p_double_ccw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
+            if val>maxv:
+                maxv=val
+                action=j
+            print(val) 
+        print(action)
         return action
         
 
