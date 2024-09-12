@@ -302,43 +302,40 @@ class Solver:
 
         values_converged = False
         dis_factor = 0.98
-        delta=0.5
+        delta=1
         while not values_converged:
             self.state_cache=self.state.copy()
             for i in self.state:
                 # calculate value
-                maxv=-10000
-                for j in BEE_ACTIONS:
-                    val=0
-                    p_double=self.environment.double_move_probs[j]
-                    p_double_cw=self.environment.double_move_probs[j]*self.environment.drift_cw_probs[j]
-                    p_double_ccw=self.environment.double_move_probs[j]*self.environment.drift_ccw_probs[j]
-                    p_cw=self.environment.drift_cw_probs[j]
-                    p_ccw=self.environment.drift_ccw_probs[j]
-                    p_success=1-p_double-p_cw-p_ccw-p_double_cw-p_double_ccw
+                j=self.policy[i]
+                val=0
+                p_double=self.environment.double_move_probs[j]
+                p_double_cw=self.environment.double_move_probs[j]*self.environment.drift_cw_probs[j]
+                p_double_ccw=self.environment.double_move_probs[j]*self.environment.drift_ccw_probs[j]
+                p_cw=self.environment.drift_cw_probs[j]
+                p_ccw=self.environment.drift_ccw_probs[j]
+                p_success=1-p_double-p_cw-p_ccw-p_double_cw-p_double_ccw
 
-                    preview=self.environment.apply_dynamics(i,j)
-                    val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
+                preview=self.environment.apply_dynamics(i,j)
+                val+=p_success*(self.vi_get_state_value(preview[1])*dis_factor+preview[0])
+                if p_double!=0:
+                    p2=self.environment.apply_dynamics(preview[1],j)
+                    val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+min(preview[0],p2[0]))
+                if p_cw!=0:
+                    p1=self.environment.apply_dynamics(i,SPIN_RIGHT)
+                    p2=self.environment.apply_dynamics(p1[1],j)
+                    val+=p_cw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
                     if p_double!=0:
-                        p2=self.environment.apply_dynamics(preview[1],j)
-                        val+=p_double*(self.vi_get_state_value(self.environment.apply_dynamics(preview[1],j)[1])*dis_factor+min(preview[0],p2[0]))
-                    if p_cw!=0:
-                        p1=self.environment.apply_dynamics(i,SPIN_RIGHT)
-                        p2=self.environment.apply_dynamics(p1[1],j)
-                        val+=p_cw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
-                        if p_double!=0:
-                            p3=self.environment.apply_dynamics(p2[1],j)
-                            val+=p_double_cw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
-                    if p_ccw!=0:
-                        p1=self.environment.apply_dynamics(i,SPIN_LEFT)
-                        p2=self.environment.apply_dynamics(p1[1],j)
-                        val+=p_ccw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
-                        if p_double!=0:
-                            p3=self.environment.apply_dynamics(p2[1],j)
-                            val+=p_double_ccw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
-                    if val>maxv:
-                        maxv=val
-                self.state[i]=maxv
+                        p3=self.environment.apply_dynamics(p2[1],j)
+                        val+=p_double_cw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
+                if p_ccw!=0:
+                    p1=self.environment.apply_dynamics(i,SPIN_LEFT)
+                    p2=self.environment.apply_dynamics(p1[1],j)
+                    val+=p_ccw*(self.vi_get_state_value(p2[1])*dis_factor+min(p1[0],p2[0]))
+                    if p_double!=0:
+                        p3=self.environment.apply_dynamics(p2[1],j)
+                        val+=p_double_ccw*(self.vi_get_state_value(p3[1])*dis_factor+min(p1[0],p2[0],p3[0]))
+                self.state[i]=val
             # check convergence
             differences = [abs(self.state_cache[s] - self.state[s]) for s in self.state]
             if max(differences) < delta:
